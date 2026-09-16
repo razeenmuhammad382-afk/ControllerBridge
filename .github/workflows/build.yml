@@ -1,0 +1,31 @@
+name: Build Controller Bridge
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract project
+        run: |
+          mkdir -p /tmp/project
+          unzip -o ControllerBridge-v0.1.zip -d /tmp/project
+          cp -R /tmp/project/ControllerBridge/. .
+          rm ControllerBridge-v0.1.zip
+
+      - name: Commit project files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Add Android project files" || true
+          git push
