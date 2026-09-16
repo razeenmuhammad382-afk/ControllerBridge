@@ -1,31 +1,40 @@
-name: Build Controller Bridge
+name: Build Controller Bridge APK
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
 
-permissions:
-  contents: write
-
 jobs:
-  prepare:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Extract Android project
         run: |
-          mkdir -p /tmp/project
-          unzip -o ControllerBridge-v0.1.zip -d /tmp/project
-          cp -R /tmp/project/ControllerBridge/. .
-          rm ControllerBridge-v0.1.zip
+          mkdir project
+          unzip -q ControllerBridge-v0.1.zip -d project
+          cp -a project/ControllerBridge/. .
 
-      - name: Commit project files
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "Add Android project files" || true
-          git push
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControllerBridge-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
