@@ -3,7 +3,8 @@ name: Build Controller Bridge APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
@@ -23,6 +24,7 @@ jobs:
                   gradlePluginPortal()
               }
           }
+
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -30,6 +32,7 @@ jobs:
                   mavenCentral()
               }
           }
+
           rootProject.name = "ControllerBridge"
           include(":app")
           EOF
@@ -64,6 +67,15 @@ jobs:
                   versionCode = 1
                   versionName = "0.1"
               }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
 
           dependencies {
@@ -76,32 +88,42 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
               <application
                   android:allowBackup="true"
                   android:label="Controller Bridge"
                   android:supportsRtl="true"
                   android:theme="@style/Theme.ControllerBridge">
+
                   <activity
                       android:name=".MainActivity"
                       android:screenOrientation="portrait"
                       android:exported="true">
+
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
+
                   </activity>
+
               </application>
+
           </manifest>
           EOF
 
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
+
               <style name="Theme.ControllerBridge"
                   parent="android:style/Theme.Material.Light.NoActionBar">
+
                   <item name="android:fontFamily">sans</item>
                   <item name="android:colorAccent">#4F46E5</item>
+
               </style>
+
           </resources>
           EOF
 
@@ -132,18 +154,20 @@ jobs:
                       setPadding(36, 36, 36, 36)
                   }
 
-                  fun label(text: String, size: Float) =
-                      TextView(this).apply {
+                  fun label(text: String, size: Float): TextView {
+                      return TextView(this).apply {
                           this.text = text
                           textSize = size
                           setPadding(0, 12, 0, 12)
                       }
+                  }
 
                   status = label("Waiting for controller", 20f)
                   device = label("Controller: not detected", 16f)
                   lastEvent = label("Last input: —", 18f)
+
                   sticks = label(
-                      "Left stick:  X 0.00   Y 0.00\\n" +
+                      "Left stick:  X 0.00   Y 0.00\n" +
                       "Right stick: X 0.00   Y 0.00",
                       18f
                   )
@@ -152,6 +176,7 @@ jobs:
                   root.addView(device)
                   root.addView(lastEvent)
                   root.addView(sticks)
+
                   root.addView(
                       label(
                           "Connect your Bluetooth controller and press buttons or move the sticks.",
@@ -160,6 +185,11 @@ jobs:
                   )
 
                   setContentView(root)
+                  refreshDevices()
+              }
+
+              override fun onResume() {
+                  super.onResume()
                   refreshDevices()
               }
 
@@ -175,18 +205,23 @@ jobs:
                   }
 
                   val d = devices.first()
+
                   status.text = "Controller detected"
                   device.text =
-                      "Controller: ${d.name}\\nDevice ID: ${d.id}"
+                      "Controller: ${d.name}\nDevice ID: ${d.id}"
               }
 
               override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+
                   if (event.action == KeyEvent.ACTION_DOWN ||
                       event.action == KeyEvent.ACTION_UP) {
 
                       val action =
-                          if (event.action == KeyEvent.ACTION_DOWN) "DOWN"
-                          else "UP"
+                          if (event.action == KeyEvent.ACTION_DOWN) {
+                              "DOWN"
+                          } else {
+                              "UP"
+                          }
 
                       lastEvent.text =
                           "Last input: ${keyName(event.keyCode)} $action"
@@ -211,45 +246,61 @@ jobs:
 
                       sticks.text = String.format(
                           Locale.US,
-                          "Left stick:  X %+.2f   Y %+.2f\\n" +
+                          "Left stick:  X %+.2f   Y %+.2f\n" +
                           "Right stick: X %+.2f   Y %+.2f",
-                          lx, ly, rx, ry
+                          lx,
+                          ly,
+                          rx,
+                          ry
                       )
 
                       lastEvent.text = "Last input: analog movement"
+
                       refreshDevices()
+
                       return true
                   }
 
                   return super.dispatchGenericMotionEvent(event)
               }
 
-              private fun isGameController(d: InputDevice): Boolean {
-                  val s = d.sources
-                  return (s and InputDevice.SOURCE_GAMEPAD) != 0 ||
-                         (s and InputDevice.SOURCE_JOYSTICK) != 0
+              private fun isGameController(
+                  device: InputDevice
+              ): Boolean {
+
+                  val sources = device.sources
+
+                  return (sources and InputDevice.SOURCE_GAMEPAD) != 0 ||
+                         (sources and InputDevice.SOURCE_JOYSTICK) != 0
               }
 
-              private fun keyName(code: Int): String =
-                  when (code) {
+              private fun keyName(code: Int): String {
+
+                  return when (code) {
                       KeyEvent.KEYCODE_BUTTON_A -> "A / Cross"
                       KeyEvent.KEYCODE_BUTTON_B -> "B / Circle"
                       KeyEvent.KEYCODE_BUTTON_X -> "X / Square"
                       KeyEvent.KEYCODE_BUTTON_Y -> "Y / Triangle"
+
                       KeyEvent.KEYCODE_BUTTON_L1 -> "L1"
                       KeyEvent.KEYCODE_BUTTON_R1 -> "R1"
                       KeyEvent.KEYCODE_BUTTON_L2 -> "L2"
                       KeyEvent.KEYCODE_BUTTON_R2 -> "R2"
+
                       KeyEvent.KEYCODE_BUTTON_THUMBL -> "Left stick click"
                       KeyEvent.KEYCODE_BUTTON_THUMBR -> "Right stick click"
+
                       KeyEvent.KEYCODE_BUTTON_START -> "Start"
                       KeyEvent.KEYCODE_BUTTON_SELECT -> "Select"
+
                       KeyEvent.KEYCODE_DPAD_UP -> "D-pad Up"
                       KeyEvent.KEYCODE_DPAD_DOWN -> "D-pad Down"
                       KeyEvent.KEYCODE_DPAD_LEFT -> "D-pad Left"
                       KeyEvent.KEYCODE_DPAD_RIGHT -> "D-pad Right"
+
                       else -> "KeyCode $code"
                   }
+              }
           }
           EOF
 
@@ -257,16 +308,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-      - name: Configure Java and Kotlin
-        run: |
-          sed -i '/android {/a\    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }' app/build.gradle.kts
-          sed -i '/android {/a\    kotlinOptions {\n        jvmTarget = "17"\n    }' app/build.gradle.kts
+          gradle-version: "8.9"
+
       - name: Build APK
         run: gradle assembleDebug
 
