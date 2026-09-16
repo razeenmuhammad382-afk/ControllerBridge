@@ -10,14 +10,248 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract Android project
+      - name: Create Android project
         run: |
-          mkdir project
-          unzip -q ControllerBridge-v0.1.zip -d project
-          cp -a project/ControllerBridge/. .
+          mkdir -p app/src/main/java/com/example/controllerbridge
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "ControllerBridge"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.example.controllerbridge"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.example.controllerbridge"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "0.1"
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.appcompat:appcompat:1.7.0")
+              implementation("com.google.android.material:material:1.12.0")
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="true"
+                  android:label="Controller Bridge"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.ControllerBridge">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.ControllerBridge"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#4F46E5</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/example/controllerbridge/MainActivity.kt <<'EOF'
+          package com.example.controllerbridge
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.view.InputDevice
+          import android.view.KeyEvent
+          import android.view.MotionEvent
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import java.util.Locale
+
+          class MainActivity : Activity() {
+
+              private lateinit var status: TextView
+              private lateinit var device: TextView
+              private lateinit var lastEvent: TextView
+              private lateinit var sticks: TextView
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(36, 36, 36, 36)
+                  }
+
+                  fun label(text: String, size: Float) =
+                      TextView(this).apply {
+                          this.text = text
+                          textSize = size
+                          setPadding(0, 12, 0, 12)
+                      }
+
+                  status = label("Waiting for controller", 20f)
+                  device = label("Controller: not detected", 16f)
+                  lastEvent = label("Last input: —", 18f)
+                  sticks = label(
+                      "Left stick:  X 0.00   Y 0.00\\n" +
+                      "Right stick: X 0.00   Y 0.00",
+                      18f
+                  )
+
+                  root.addView(status)
+                  root.addView(device)
+                  root.addView(lastEvent)
+                  root.addView(sticks)
+                  root.addView(
+                      label(
+                          "Connect your Bluetooth controller and press buttons or move the sticks.",
+                          15f
+                      )
+                  )
+
+                  setContentView(root)
+                  refreshDevices()
+              }
+
+              private fun refreshDevices() {
+                  val devices = InputDevice.getDeviceIds()
+                      .mapNotNull { InputDevice.getDevice(it) }
+                      .filter { isGameController(it) }
+
+                  if (devices.isEmpty()) {
+                      status.text = "Waiting for controller"
+                      device.text = "Controller: not detected"
+                      return
+                  }
+
+                  val d = devices.first()
+                  status.text = "Controller detected"
+                  device.text =
+                      "Controller: ${d.name}\\nDevice ID: ${d.id}"
+              }
+
+              override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                  if (event.action == KeyEvent.ACTION_DOWN ||
+                      event.action == KeyEvent.ACTION_UP) {
+
+                      val action =
+                          if (event.action == KeyEvent.ACTION_DOWN) "DOWN"
+                          else "UP"
+
+                      lastEvent.text =
+                          "Last input: ${keyName(event.keyCode)} $action"
+
+                      refreshDevices()
+                  }
+
+                  return super.dispatchKeyEvent(event)
+              }
+
+              override fun dispatchGenericMotionEvent(
+                  event: MotionEvent
+              ): Boolean {
+
+                  if (event.action == MotionEvent.ACTION_MOVE &&
+                      (event.source and InputDevice.SOURCE_CLASS_JOYSTICK) != 0) {
+
+                      val lx = event.getAxisValue(MotionEvent.AXIS_X)
+                      val ly = event.getAxisValue(MotionEvent.AXIS_Y)
+                      val rx = event.getAxisValue(MotionEvent.AXIS_Z)
+                      val ry = event.getAxisValue(MotionEvent.AXIS_RZ)
+
+                      sticks.text = String.format(
+                          Locale.US,
+                          "Left stick:  X %+.2f   Y %+.2f\\n" +
+                          "Right stick: X %+.2f   Y %+.2f",
+                          lx, ly, rx, ry
+                      )
+
+                      lastEvent.text = "Last input: analog movement"
+                      refreshDevices()
+                      return true
+                  }
+
+                  return super.dispatchGenericMotionEvent(event)
+              }
+
+              private fun isGameController(d: InputDevice): Boolean {
+                  val s = d.sources
+                  return (s and InputDevice.SOURCE_GAMEPAD) != 0 ||
+                         (s and InputDevice.SOURCE_JOYSTICK) != 0
+              }
+
+              private fun keyName(code: Int): String =
+                  when (code) {
+                      KeyEvent.KEYCODE_BUTTON_A -> "A / Cross"
+                      KeyEvent.KEYCODE_BUTTON_B -> "B / Circle"
+                      KeyEvent.KEYCODE_BUTTON_X -> "X / Square"
+                      KeyEvent.KEYCODE_BUTTON_Y -> "Y / Triangle"
+                      KeyEvent.KEYCODE_BUTTON_L1 -> "L1"
+                      KeyEvent.KEYCODE_BUTTON_R1 -> "R1"
+                      KeyEvent.KEYCODE_BUTTON_L2 -> "L2"
+                      KeyEvent.KEYCODE_BUTTON_R2 -> "R2"
+                      KeyEvent.KEYCODE_BUTTON_THUMBL -> "Left stick click"
+                      KeyEvent.KEYCODE_BUTTON_THUMBR -> "Right stick click"
+                      KeyEvent.KEYCODE_BUTTON_START -> "Start"
+                      KeyEvent.KEYCODE_BUTTON_SELECT -> "Select"
+                      KeyEvent.KEYCODE_DPAD_UP -> "D-pad Up"
+                      KeyEvent.KEYCODE_DPAD_DOWN -> "D-pad Down"
+                      KeyEvent.KEYCODE_DPAD_LEFT -> "D-pad Left"
+                      KeyEvent.KEYCODE_DPAD_RIGHT -> "D-pad Right"
+                      else -> "KeyCode $code"
+                  }
+          }
+          EOF
 
       - name: Set up Java
         uses: actions/setup-java@v4
