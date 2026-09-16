@@ -263,7 +263,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
+      - name: Configure Java and Kotlin
+        run: |
+          sed -i '/android {/a\    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }' app/build.gradle.kts
+          sed -i '/android {/a\    kotlinOptions {\n        jvmTarget = "17"\n    }' app/build.gradle.kts
       - name: Build APK
         run: gradle assembleDebug
 
